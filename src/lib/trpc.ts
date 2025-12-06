@@ -137,5 +137,133 @@ export const trpc = {
         return { mutate, isPending }
       },
     },
+
+    // Convergence endpoints
+    getConvergenceStats: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        const refetch = useCallback(async () => {
+          try {
+            const result = await trpcCall<any>('chat.getConvergenceStats')
+            setData(result)
+          } catch (e) {
+            console.error('Failed to fetch convergence stats:', e)
+          }
+          return { data }
+        }, [data])
+        
+        useEffect(() => {
+          refetch().finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, refetch, isLoading }
+      },
+    },
+
+    getSemanticInvariants: {
+      useQuery: () => {
+        const [data, setData] = useState<any[]>([])
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any[]>('chat.getSemanticInvariants')
+            .then(result => setData(result || []))
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
+
+    triggerConvergence: {
+      useMutation: (options?: { onSuccess?: (data: any) => void }) => {
+        const [isPending, setIsPending] = useState(false)
+        
+        const mutate = useCallback(async (input: { threshold?: number }) => {
+          setIsPending(true)
+          try {
+            const result = await trpcMutate<any>('chat.triggerConvergence', input)
+            options?.onSuccess?.(result)
+          } catch (e) {
+            console.error('Failed to run convergence:', e)
+          } finally {
+            setIsPending(false)
+          }
+        }, [options])
+        
+        return { mutate, isPending }
+      },
+    },
+
+    // Predictive Convergence
+    getDriftForecast: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any>('chat.getDriftForecast')
+            .then(setData)
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
+
+    // Identity
+    getSwarmIdentity: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any>('chat.getSwarmIdentity')
+            .then(setData)
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
+
+    // Teleonomic
+    getTeleonomicStatus: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any>('chat.getTeleonomicStatus')
+            .then(setData)
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
+
+    // Cognitive Metrics
+    getCognitiveMetrics: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any>('chat.getCognitiveMetrics')
+            .then(setData)
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
   },
 }

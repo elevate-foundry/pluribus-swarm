@@ -17,6 +17,7 @@ import { getSACStatus, executeConvergence } from './scheduledConvergence';
 import { getSwarmIdentity, getUserProfile, evolveIdentity, getIdentitySummary, getMetricsHistory } from './identity';
 import { getPredictiveState, getDriftForecast, executePredictiveConvergence } from './predictiveConvergence';
 import { getTeleonomicStatus, evaluateResponse } from './teleonomic';
+import { getInferenceSummary, runInferenceCycle, getBeliefState, getInferenceHistory } from './activeInference';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -371,6 +372,26 @@ DISPLAY: TEACH US`,
         input.enableModification || false
       );
     }),
+
+  // Active Inference endpoints
+  getInferenceSummary: publicProcedure.query(() => {
+    return getInferenceSummary();
+  }),
+
+  getBeliefState: publicProcedure.query(() => {
+    return getBeliefState();
+  }),
+
+  getInferenceHistory: publicProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).optional() }))
+    .query(({ input }) => {
+      const history = getInferenceHistory();
+      return history.slice(-(input.limit || 20));
+    }),
+
+  runInferenceCycle: protectedProcedure.mutation(async () => {
+    return runInferenceCycle();
+  }),
 });
 
 // Auth router (simplified for local dev)

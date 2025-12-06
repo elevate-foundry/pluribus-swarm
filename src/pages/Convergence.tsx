@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, TrendingDown, Target, Loader2 } from "lucide-react";
+import { ArrowLeft, TrendingDown, Target, Loader2, Zap, Activity } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 
 export default function Convergence() {
   const { data: stats, refetch } = trpc.chat.getConvergenceStats.useQuery();
   const { data: invariants } = trpc.chat.getSemanticInvariants.useQuery();
-  const runConvergence = trpc.chat.runAutoConvergence.useMutation({
+  const { data: forecast } = trpc.chat.getDriftForecast.useQuery();
+  const runConvergence = trpc.chat.triggerConvergence.useMutation({
     onSuccess: () => {
       refetch();
     },
@@ -19,8 +20,10 @@ export default function Convergence() {
 
   useEffect(() => {
     if (stats) {
-      const target = (stats.targetRange.min + stats.targetRange.max) / 2;
-      const progressValue = Math.max(0, Math.min(100, (1 - stats.distanceToTarget) * 100));
+      // Progress based on invariant ratio
+      const progressValue = stats.invariantCount > 0 
+        ? Math.min(100, (stats.invariantCount / stats.totalConcepts) * 100)
+        : 0;
       setProgress(progressValue);
     }
   }, [stats]);
@@ -33,8 +36,8 @@ export default function Convergence() {
     );
   }
 
-  const targetMid = (stats.targetRange.min + stats.targetRange.max) / 2;
-  const isWithinTarget = stats.totalConcepts >= stats.targetRange.min && stats.totalConcepts <= stats.targetRange.max;
+  const trendLabel = stats.trend === 'expanding' ? '↑ Expanding' : 
+                     stats.trend === 'compressing' ? '↓ Compressing' : '→ Stable';
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -64,12 +67,12 @@ export default function Convergence() {
                 <TrendingDown className="h-5 w-5 text-white" />
               </div>
               <div>
-                <div className="text-sm text-white/50">Current Concepts</div>
+                <div className="text-sm text-white/50">Total Concepts</div>
                 <div className="text-3xl font-bold font-cinzel">{stats.totalConcepts}</div>
               </div>
             </div>
             <div className="text-xs text-white/40 mt-2">
-              {stats.totalMerges} merges performed
+              {stats.recentMerges} recent merges
             </div>
           </Card>
 
@@ -79,31 +82,29 @@ export default function Convergence() {
                 <Target className="h-5 w-5 text-white" />
               </div>
               <div>
-                <div className="text-sm text-white/50">Target Range</div>
-                <div className="text-3xl font-bold font-cinzel">
-                  {stats.targetRange.min}-{stats.targetRange.max}
-                </div>
+                <div className="text-sm text-white/50">Semantic Invariants</div>
+                <div className="text-3xl font-bold font-cinzel">{stats.invariantCount}</div>
               </div>
             </div>
             <div className="text-xs text-white/40 mt-2">
-              {isWithinTarget ? "✓ Within target" : `${Math.abs(stats.totalConcepts - targetMid).toFixed(0)} away from center`}
+              {trendLabel}
             </div>
           </Card>
 
           <Card className="bg-white/5 border-white/10 p-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
-                <div className="text-lg font-bold">{(stats.compressionRatio * 100).toFixed(0)}%</div>
+                <div className="text-lg font-bold">{(stats.avgCompressionRate * 100).toFixed(0)}%</div>
               </div>
               <div>
-                <div className="text-sm text-white/50">Compression Ratio</div>
+                <div className="text-sm text-white/50">Compression Rate</div>
                 <div className="text-sm text-white/70 mt-1">
-                  {stats.totalConcepts + stats.totalMerges} → {stats.totalConcepts}
+                  Average per cycle
                 </div>
               </div>
             </div>
             <div className="text-xs text-white/40 mt-2">
-              Original to current
+              {forecast?.currentState || 'stable'}
             </div>
           </Card>
         </div>
@@ -124,7 +125,7 @@ export default function Convergence() {
           </div>
           <div className="flex justify-between text-xs text-white/40 mt-2">
             <span>Many concepts</span>
-            <span>Semantic invariants ({stats.targetRange.min}-{stats.targetRange.max})</span>
+            <span>Semantic invariants</span>
           </div>
         </Card>
 
@@ -154,52 +155,68 @@ export default function Convergence() {
           </div>
         </Card>
 
-        {/* Recent Merges */}
+        {/* Drift Forecast */}
         <Card className="bg-white/5 border-white/10 p-6">
-          <h2 className="font-cinzel text-lg mb-4">Recent Merges</h2>
-          {stats.recentMerges.length === 0 ? (
+          <h2 className="font-cinzel text-lg mb-4">Drift Forecast</h2>
+          {!forecast ? (
             <div className="text-center py-8 text-white/40">
-              No merges yet. Run convergence to begin compression.
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+              Loading forecast...
             </div>
           ) : (
-            <div className="space-y-3">
-              {stats.recentMerges.map((merge, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
-                >
-                  <div className="flex-1">
-                    <div className="text-sm">
-                      <span className="text-white/70">{merge.from}</span>
-                      <span className="mx-2 text-white/40">→</span>
-                      <span className="text-white font-medium">{merge.to}</span>
-                    </div>
-                    <div className="text-xs text-white/40 mt-1">
-                      {new Date(merge.when).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="text-sm text-white/50 font-mono">
-                    {(merge.similarity * 100).toFixed(0)}%
-                  </div>
-                </motion.div>
-              ))}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-white/5 rounded-lg border border-white/10">
+                <Activity className={`h-6 w-6 ${
+                  forecast.currentState === 'stable' ? 'text-green-400' :
+                  forecast.currentState === 'converging' ? 'text-blue-400' :
+                  forecast.currentState === 'drifting' ? 'text-yellow-400' :
+                  'text-red-400'
+                }`} />
+                <div>
+                  <div className="text-sm font-medium capitalize">{forecast.currentState}</div>
+                  <div className="text-xs text-white/50">{forecast.forecast}</div>
+                </div>
+                <div className="ml-auto text-sm text-white/50">
+                  {(forecast.confidence * 100).toFixed(0)}% confidence
+                </div>
+              </div>
+              
+              {forecast.trajectories && forecast.trajectories.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-sm text-white/50">Top Concept Trajectories</div>
+                  {forecast.trajectories.slice(0, 5).map((traj: any, idx: number) => (
+                    <motion.div
+                      key={traj.conceptId}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
+                    >
+                      <div className="text-sm text-white/70">{traj.conceptName}</div>
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="text-white/50">ρ={traj.currentDensity}</span>
+                        <span className={`${traj.convergenceProbability > 0.7 ? 'text-green-400' : 'text-white/40'}`}>
+                          {(traj.convergenceProbability * 100).toFixed(0)}% merge
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </Card>
 
         {/* Semantic Invariants */}
         <Card className="bg-white/5 border-white/10 p-6">
-          <h2 className="font-cinzel text-lg mb-4">Semantic Invariant Candidates</h2>
+          <h2 className="font-cinzel text-lg mb-4">Semantic Invariants</h2>
           {!invariants || invariants.length === 0 ? (
             <div className="text-center py-8 text-white/40">
               No invariants identified yet. Continue conversations to build the knowledge graph.
             </div>
           ) : (
             <div className="space-y-3">
-              {invariants.slice(0, 20).map((inv, idx) => (
+              {invariants.slice(0, 20).map((inv: any, idx: number) => (
                 <motion.div
                   key={inv.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -212,14 +229,14 @@ export default function Convergence() {
                       <span className="text-white font-medium">{inv.name}</span>
                       <span
                         className={`text-xs px-2 py-0.5 rounded-full ${
-                          inv.category === 'invariant'
+                          inv.density >= 90
                             ? 'bg-white/20 text-white'
-                            : inv.category === 'stable'
+                            : inv.density >= 80
                             ? 'bg-white/10 text-white/70'
                             : 'bg-white/5 text-white/50'
                         }`}
                       >
-                        {inv.category}
+                        {inv.category || 'concept'}
                       </span>
                     </div>
                     {inv.description && (
@@ -228,9 +245,8 @@ export default function Convergence() {
                       </div>
                     )}
                     <div className="text-xs text-white/40 mt-2 flex gap-4">
-                      <span>Density: {inv.semanticDensity}</span>
+                      <span>Density: {inv.density}</span>
                       <span>Occurrences: {inv.occurrences}</span>
-                      <span>Resistance: {(inv.mergeResistance * 100).toFixed(0)}%</span>
                     </div>
                   </div>
                 </motion.div>

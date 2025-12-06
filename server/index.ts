@@ -9,6 +9,7 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { appRouter } from './routers';
 import { createContext } from './context';
 import { initializeScheduledConvergence } from './scheduledConvergence';
+import { startActiveInference } from './activeInference';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,10 @@ app.listen(PORT, () => {
   
   // Initialize Scheduled Auto-Convergence (runs every 24 hours)
   initializeScheduledConvergence(24);
+  
+  // Start Active Inference Loop (the system's "heartbeat")
+  // Runs every 30 seconds, continuously predicting and adapting
+  startActiveInference(30000);
 });
 
 export type { AppRouter } from './routers';
