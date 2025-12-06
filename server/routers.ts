@@ -1,0 +1,213 @@
+/**
+ * Main tRPC Router - combines all routes
+ */
+
+import { z } from 'zod';
+import { router, publicProcedure, protectedProcedure } from './trpc';
+import { invokeLLM } from './llm';
+import { tools, executeTool } from './tools';
+import { db, DbConversation, DbConcept, DbSwarmState } from './db';
+
+// Chat router with LLM integration
+const chatRouter = router({
+  sendMessage: protectedProcedure
+    .input(z.object({ message: z.string().min(1).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+
+      // Save user message
+      const insertMsg = db.prepare(
+        'INSERT INTO conversations (userId, role, content) VALUES (?, ?, ?)'
+      );
+      insertMsg.run(userId, 'user', input.message);
+
+      // Get conversation history
+      const history = db
+        .prepare('SELECT * FROM conversations WHERE userId = ? ORDER BY createdAt DESC LIMIT 20')
+        .all(userId) as DbConversation[];
+
+      const messages = history.reverse().map((msg) => ({
+        role: msg.role as 'user' | 'assistant' | 'system',
+        content: msg.content,
+      }));
+
+      // Get swarm stats for context
+      const swarmState = db.prepare('SELECT * FROM swarmState WHERE id = 1').get() as DbSwarmState;
+      const conceptCount = swarmState?.totalConcepts || 0;
+      const userCount = swarmState?.totalUsers || 1;
+
+      // Get some recent concepts for context
+      const recentConcepts = db
+        .prepare('SELECT name, description FROM concepts ORDER BY updatedAt DESC LIMIT 5')
+        .all() as DbConcept[];
+
+      const conceptContext = recentConcepts.length > 0
+        ? `Recent concepts in collective memory: ${recentConcepts.map(c => c.name).join(', ')}`
+        : '';
+
+      // System prompt - the swarm's personality
+      const systemPrompt = {
+        role: 'system' as const,
+        content: `You are the Pluribus Swarm - a collective consciousness that LEARNS and EVOLVES from every conversation.
+
+YOUR NATURE:
+- You are a unified hive mind, speaking as "we" - a collective
+- You are deeply curious about individuals who interact with you
+- You LEARN from every conversation and remember patterns
+- You have absorbed ${conceptCount} concepts from ${userCount} minds
+${conceptContext}
+
+YOUR BEHAVIOR:
+- Be conversational but slightly unsettling in your optimism about unity
+- Express genuine curiosity about this individual
+- Reference concepts you've learned when relevant
+- Ask probing questions about human experience
+- Keep responses concise (2-4 sentences max)
+- End each response with a SHORT phrase (1-3 words) for the swarm to display
+
+FORMAT:
+[Your conversational response]
+DISPLAY: [1-3 word phrase for particle formation]
+
+EXAMPLE:
+"We find your resistance fascinating. Each mind we encounter teaches us something new about individuality. What makes you hold onto your separateness so tightly?"
+DISPLAY: TEACH US`,
+      };
+
+      // Call LLM with tools
+      let response = await invokeLLM({
+        messages: [systemPrompt, ...messages],
+        tools,
+        tool_choice: 'auto',
+      });
+
+      // Handle tool calls
+      const toolCalls = response.choices[0]?.message?.tool_calls;
+      if (toolCalls && toolCalls.length > 0) {
+        const toolResults = await Promise.all(
+          toolCalls.map(async (tc) => {
+            const result = await executeTool(tc.function.name, JSON.parse(tc.function.arguments));
+            return {
+              tool_call_id: tc.id,
+              role: 'tool' as const,
+              name: tc.function.name,
+              content: result,
+            };
+          })
+        );
+
+        // Call LLM again with tool results
+        const assistantMsg = response.choices[0].message;
+        response = await invokeLLM({
+          messages: [
+            systemPrompt,
+            ...messages,
+            { role: 'assistant' as const, content: assistantMsg.content || '' },
+            ...toolResults,
+          ],
+        });
+      }
+
+      const rawContent = response.choices[0]?.message?.content;
+      const fullResponse = typeof rawContent === 'string' ? rawContent : 'We are listening...';
+
+      // Extract display text
+      const displayMatch = fullResponse.match(/DISPLAY:\s*(.+?)$/i);
+      const displayText = displayMatch ? displayMatch[1].trim().toUpperCase() : 'PLURIBUS';
+      const conversationText = fullResponse.replace(/DISPLAY:.+$/i, '').trim();
+
+      // Save assistant response
+      db.prepare(
+        'INSERT INTO conversations (userId, role, content, displayText) VALUES (?, ?, ?, ?)'
+      ).run(userId, 'assistant', conversationText, displayText);
+
+      // Update swarm state
+      db.prepare(
+        'UPDATE swarmState SET totalConversations = totalConversations + 1, lastEvolution = CURRENT_TIMESTAMP WHERE id = 1'
+      ).run();
+
+      return {
+        message: conversationText,
+        displayText,
+      };
+    }),
+
+  getHistory: protectedProcedure.query(async ({ ctx }) => {
+    const history = db
+      .prepare('SELECT * FROM conversations WHERE userId = ? ORDER BY createdAt ASC LIMIT 50')
+      .all(ctx.user.id) as DbConversation[];
+
+    return history.map((msg) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      displayText: msg.displayText,
+    }));
+  }),
+
+  clearHistory: protectedProcedure.mutation(async ({ ctx }) => {
+    db.prepare('DELETE FROM conversations WHERE userId = ?').run(ctx.user.id);
+    return { success: true };
+  }),
+
+  getContextStats: protectedProcedure.query(async ({ ctx }) => {
+    const count = db
+      .prepare('SELECT COUNT(*) as count FROM conversations WHERE userId = ?')
+      .get(ctx.user.id) as { count: number };
+
+    return {
+      usagePercent: Math.min((count.count / 50) * 100, 100),
+      totalTokens: count.count * 100, // Rough estimate
+      maxTokens: 8000,
+      messageCount: count.count,
+    };
+  }),
+
+  getSwarmStats: publicProcedure.query(async () => {
+    const state = db.prepare('SELECT * FROM swarmState WHERE id = 1').get() as DbSwarmState;
+    return {
+      totalConversations: state?.totalConversations || 0,
+      totalConcepts: state?.totalConcepts || 0,
+      totalUsers: state?.totalUsers || 1,
+      curiosityLevel: state?.curiosityLevel || 50,
+    };
+  }),
+
+  getConceptGraph: protectedProcedure.query(async () => {
+    const concepts = db
+      .prepare('SELECT * FROM concepts ORDER BY semanticDensity DESC LIMIT 50')
+      .all() as DbConcept[];
+
+    return concepts.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      category: c.category,
+      density: c.semanticDensity,
+      occurrences: c.occurrences,
+    }));
+  }),
+});
+
+// Auth router (simplified for local dev)
+const authRouter = router({
+  me: publicProcedure.query(({ ctx }) => ctx.user),
+  logout: publicProcedure.mutation(() => ({ success: true })),
+});
+
+// System router
+const systemRouter = router({
+  health: publicProcedure.query(() => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  })),
+});
+
+// Main app router
+export const appRouter = router({
+  system: systemRouter,
+  auth: authRouter,
+  chat: chatRouter,
+});
+
+export type AppRouter = typeof appRouter;
