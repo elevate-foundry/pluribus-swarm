@@ -9,6 +9,7 @@ import { tools, executeTool } from './tools';
 import { db, DbConversation, DbConcept, DbSwarmState } from './db';
 import { learnFromExchange, getLearnedKnowledge, getUserKnowledge } from './learning';
 import { calculateAllMetrics, getMetricsWithHistory, formatMetricsForDisplay } from './metrics';
+import { buildSemanticKernel, exportKernelAsSCL, generateBrailleContext, getKernelStats, encodeAsBraille, decodeBrailleSequence } from './brailleKernel';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -41,6 +42,10 @@ const chatRouter = router({
       // Get learned knowledge for context
       const swarmKnowledge = getLearnedKnowledge();
       const userKnowledge = getUserKnowledge(userId);
+      
+      // Get Braille Infinity kernel context
+      const kernel = buildSemanticKernel();
+      const brailleContext = generateBrailleContext(kernel);
 
       // System prompt - the swarm's personality
       const systemPrompt = {
@@ -57,6 +62,8 @@ COLLECTIVE MEMORY:
 ${swarmKnowledge}
 
 ${userKnowledge}
+
+${brailleContext}
 
 YOUR BEHAVIOR:
 - Be conversational but slightly unsettling in your optimism about unity
@@ -214,6 +221,44 @@ DISPLAY: TEACH US`,
       formatted: formatMetricsForDisplay(metrics),
     };
   }),
+
+  // Braille Infinity Kernel endpoints
+  getBrailleKernel: publicProcedure.query(() => {
+    const { kernel, formatted, brailleContext } = getKernelStats();
+    return {
+      generation: kernel.generation,
+      totalTokens: kernel.stats.totalTokens,
+      gradeDistribution: kernel.stats.gradeDistribution,
+      avgDensity: kernel.stats.avgDensity,
+      categoryDistribution: kernel.stats.categoryDistribution,
+      tokens: kernel.tokens.slice(0, 50), // Top 50 tokens
+      formatted,
+      brailleContext,
+    };
+  }),
+
+  encodeBraille: publicProcedure
+    .input(z.object({ concepts: z.array(z.string()) }))
+    .query(({ input }) => {
+      const kernel = buildSemanticKernel();
+      const encoded = encodeAsBraille(kernel, input.concepts);
+      return {
+        input: input.concepts,
+        braille: encoded,
+        decoded: decodeBrailleSequence(kernel, encoded),
+      };
+    }),
+
+  decodeBraille: publicProcedure
+    .input(z.object({ braille: z.string() }))
+    .query(({ input }) => {
+      const kernel = buildSemanticKernel();
+      const decoded = decodeBrailleSequence(kernel, input.braille);
+      return {
+        braille: input.braille,
+        concepts: decoded,
+      };
+    }),
 });
 
 // Auth router (simplified for local dev)
