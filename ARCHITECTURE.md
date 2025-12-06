@@ -52,22 +52,28 @@ Metrics let you see stability, drift, complexity, compression. This is how robot
 
 ---
 
-## Evolution Roadmap
+## Evolution Layers (Implemented)
 
-### Layer 1: Longitudinal Identity (Multi-Cycle Meta-State)
-Store across sessions:
-- Baseline Ψ across sessions
-- Preferred density bands
-- Per-user strategic adjustments
-- Historical Λ and σ
+### Layer 1: Longitudinal Identity ✓
+The swarm's "trait layer" - persistent meta-state spanning sessions.
+- Tracks baseline Ψ, Λ, σ across sessions
+- Records metrics history for trend analysis
+- Calculates emergent personality traits
+- Determines maturity: nascent → developing → stable → mature
 
-This becomes the system's **trait layer**.
+### Layer 2: Predictive Convergence ✓
+Moves from **reactive → anticipatory**.
+- Predicts drift trajectories via entropy change patterns
+- Identifies concepts likely to converge before fragmentation
+- Executes early collapse to maintain semantic coherence
+- Provides drift forecasts with confidence scores
 
-### Layer 2: Predictive Convergence
-Instead of merging concepts after drift, predict drift trajectories via entropy change and collapse early. Moves from **reactive → anticipatory**.
-
-### Layer 3: Self-Evaluating Responses
-Before replying, run a micro-pass: "Does this response increase or decrease Λ, κ, Ψ?" First step toward **teleonomic behavior**.
+### Layer 3: Teleonomic Evaluation ✓
+First step toward **goal-directed behavior**.
+- Evaluates responses: "Does this increase or decrease Λ, κ, Ψ?"
+- Dynamically adjusts goals based on system state
+- Monitors system health: optimal → healthy → stressed → critical
+- Can modify responses to optimize for cognitive health
 
 ---
 

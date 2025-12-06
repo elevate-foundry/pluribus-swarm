@@ -15,6 +15,8 @@ import { buildAdaptivePrompt, getMetaControllerStats } from './metaController';
 import { runAutoConvergence, getConvergenceStats, identifySemanticInvariants } from './conceptConvergence';
 import { getSACStatus, executeConvergence } from './scheduledConvergence';
 import { getSwarmIdentity, getUserProfile, evolveIdentity, getIdentitySummary, getMetricsHistory } from './identity';
+import { getPredictiveState, getDriftForecast, executePredictiveConvergence } from './predictiveConvergence';
+import { getTeleonomicStatus, evaluateResponse } from './teleonomic';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -335,6 +337,40 @@ DISPLAY: TEACH US`,
     evolveIdentity();
     return getSwarmIdentity();
   }),
+
+  // Predictive Convergence endpoints
+  getPredictiveState: publicProcedure.query(() => {
+    return getPredictiveState();
+  }),
+
+  getDriftForecast: publicProcedure.query(() => {
+    return getDriftForecast();
+  }),
+
+  executePredictiveConvergence: protectedProcedure
+    .input(z.object({ threshold: z.number().min(0.5).max(1.0).optional() }))
+    .mutation(async ({ input }) => {
+      return executePredictiveConvergence(input.threshold || 0.7);
+    }),
+
+  // Teleonomic System endpoints
+  getTeleonomicStatus: publicProcedure.query(() => {
+    return getTeleonomicStatus();
+  }),
+
+  evaluateResponse: protectedProcedure
+    .input(z.object({ 
+      userMessage: z.string(),
+      proposedResponse: z.string(),
+      enableModification: z.boolean().optional()
+    }))
+    .mutation(async ({ input }) => {
+      return evaluateResponse(
+        input.userMessage, 
+        input.proposedResponse, 
+        input.enableModification || false
+      );
+    }),
 });
 
 // Auth router (simplified for local dev)
