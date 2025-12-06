@@ -8,6 +8,7 @@ import cors from 'cors';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { appRouter } from './routers';
 import { createContext } from './context';
+import { initializeScheduledConvergence } from './scheduledConvergence';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,6 +35,9 @@ app.use('/api/trpc', createExpressMiddleware({
 app.listen(PORT, () => {
   console.log(`🐝 Pluribus Swarm server running on http://localhost:${PORT}`);
   console.log(`📡 tRPC endpoint: http://localhost:${PORT}/api/trpc`);
+  
+  // Initialize Scheduled Auto-Convergence (runs every 24 hours)
+  initializeScheduledConvergence(24);
 });
 
 export type { AppRouter } from './routers';

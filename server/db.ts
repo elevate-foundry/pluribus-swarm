@@ -97,11 +97,24 @@ db.exec(`
   INSERT OR IGNORE INTO users (id, openId, name, role)
   VALUES (1, 'local-dev-user', 'Local Developer', 'user');
 
+  -- Concept convergence history
+  CREATE TABLE IF NOT EXISTS conceptConvergence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fromConceptId INTEGER NOT NULL,
+    toConceptId INTEGER NOT NULL,
+    similarityScore INTEGER NOT NULL,
+    reason TEXT,
+    totalConceptsBefore INTEGER NOT NULL,
+    totalConceptsAfter INTEGER NOT NULL,
+    mergedAt TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
   -- Create indexes for performance
   CREATE INDEX IF NOT EXISTS idx_conversations_userId ON conversations(userId);
   CREATE INDEX IF NOT EXISTS idx_concepts_name ON concepts(name);
   CREATE INDEX IF NOT EXISTS idx_userConcepts_userId ON userConcepts(userId);
   CREATE INDEX IF NOT EXISTS idx_conceptRelations_from ON conceptRelations(fromConceptId);
+  CREATE INDEX IF NOT EXISTS idx_convergence_mergedAt ON conceptConvergence(mergedAt);
 `);
 
 console.log('📦 Database initialized at:', DB_PATH);

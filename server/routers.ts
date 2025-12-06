@@ -10,6 +10,10 @@ import { db, DbConversation, DbConcept, DbSwarmState } from './db';
 import { learnFromExchange, getLearnedKnowledge, getUserKnowledge } from './learning';
 import { calculateAllMetrics, getMetricsWithHistory, formatMetricsForDisplay } from './metrics';
 import { buildSemanticKernel, exportKernelAsSCL, generateBrailleContext, getKernelStats, encodeAsBraille, decodeBrailleSequence } from './brailleKernel';
+import { manageContext, getContextStats } from './contextManager';
+import { buildAdaptivePrompt, getMetaControllerStats } from './metaController';
+import { runAutoConvergence, getConvergenceStats, identifySemanticInvariants } from './conceptConvergence';
+import { getSACStatus, executeConvergence } from './scheduledConvergence';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -46,6 +50,9 @@ const chatRouter = router({
       // Get Braille Infinity kernel context
       const kernel = buildSemanticKernel();
       const brailleContext = generateBrailleContext(kernel);
+      
+      // Get adaptive prompt from meta-controller
+      const adaptivePrompt = buildAdaptivePrompt(userId);
 
       // System prompt - the swarm's personality
       const systemPrompt = {
@@ -64,6 +71,8 @@ ${swarmKnowledge}
 ${userKnowledge}
 
 ${brailleContext}
+
+${adaptivePrompt}
 
 YOUR BEHAVIOR:
 - Be conversational but slightly unsettling in your optimism about unity
@@ -259,6 +268,45 @@ DISPLAY: TEACH US`,
         concepts: decoded,
       };
     }),
+
+  // Meta-Controller endpoints
+  getMetaControllerStats: protectedProcedure.query(({ ctx }) => {
+    return getMetaControllerStats(ctx.user.id);
+  }),
+
+  // Concept Convergence endpoints
+  getConvergenceStats: publicProcedure.query(() => {
+    return getConvergenceStats();
+  }),
+
+  getSemanticInvariants: publicProcedure.query(() => {
+    const invariants = identifySemanticInvariants();
+    return invariants.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      category: c.category,
+      density: c.semanticDensity,
+      occurrences: c.occurrences,
+    }));
+  }),
+
+  triggerConvergence: protectedProcedure
+    .input(z.object({ threshold: z.number().min(0.5).max(1.0).optional() }))
+    .mutation(async ({ input }) => {
+      const result = await runAutoConvergence(input.threshold || 0.85);
+      return result;
+    }),
+
+  // Scheduled Auto-Convergence status
+  getSACStatus: publicProcedure.query(() => {
+    return getSACStatus();
+  }),
+
+  triggerSAC: protectedProcedure.mutation(async () => {
+    const result = await executeConvergence();
+    return result;
+  }),
 });
 
 // Auth router (simplified for local dev)
