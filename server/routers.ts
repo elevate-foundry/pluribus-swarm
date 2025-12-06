@@ -14,6 +14,7 @@ import { manageContext, getContextStats } from './contextManager';
 import { buildAdaptivePrompt, getMetaControllerStats } from './metaController';
 import { runAutoConvergence, getConvergenceStats, identifySemanticInvariants } from './conceptConvergence';
 import { getSACStatus, executeConvergence } from './scheduledConvergence';
+import { getSwarmIdentity, getUserProfile, evolveIdentity, getIdentitySummary, getMetricsHistory } from './identity';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -53,6 +54,9 @@ const chatRouter = router({
       
       // Get adaptive prompt from meta-controller
       const adaptivePrompt = buildAdaptivePrompt(userId);
+      
+      // Get identity summary
+      const identitySummary = getIdentitySummary();
 
       // System prompt - the swarm's personality
       const systemPrompt = {
@@ -73,6 +77,8 @@ ${userKnowledge}
 ${brailleContext}
 
 ${adaptivePrompt}
+
+${identitySummary}
 
 YOUR BEHAVIOR:
 - Be conversational but slightly unsettling in your optimism about unity
@@ -149,6 +155,8 @@ DISPLAY: TEACH US`,
           if (concepts.length > 0) {
             console.log(`🐝 Swarm learned ${concepts.length} concepts from exchange`);
           }
+          // Evolve identity after learning
+          evolveIdentity();
         })
         .catch(err => console.error('Learning failed:', err));
 
@@ -306,6 +314,26 @@ DISPLAY: TEACH US`,
   triggerSAC: protectedProcedure.mutation(async () => {
     const result = await executeConvergence();
     return result;
+  }),
+
+  // Identity System endpoints
+  getSwarmIdentity: publicProcedure.query(() => {
+    return getSwarmIdentity();
+  }),
+
+  getUserProfile: protectedProcedure.query(({ ctx }) => {
+    return getUserProfile(ctx.user.id);
+  }),
+
+  getMetricsHistory: publicProcedure
+    .input(z.object({ limit: z.number().min(1).max(500).optional() }))
+    .query(({ input }) => {
+      return getMetricsHistory(input.limit || 100);
+    }),
+
+  evolveIdentity: protectedProcedure.mutation(() => {
+    evolveIdentity();
+    return getSwarmIdentity();
   }),
 });
 
