@@ -8,6 +8,7 @@ import { invokeLLM } from './llm';
 import { tools, executeTool } from './tools';
 import { db, DbConversation, DbConcept, DbSwarmState } from './db';
 import { learnFromExchange, getLearnedKnowledge, getUserKnowledge } from './learning';
+import { calculateAllMetrics, getMetricsWithHistory, formatMetricsForDisplay } from './metrics';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -195,6 +196,23 @@ DISPLAY: TEACH US`,
       density: c.semanticDensity,
       occurrences: c.occurrences,
     }));
+  }),
+
+  // Cognitive Metrics for Evolution Dashboard
+  getCognitiveMetrics: publicProcedure.query(() => {
+    return calculateAllMetrics();
+  }),
+
+  getMetricsWithHistory: publicProcedure.query(() => {
+    return getMetricsWithHistory();
+  }),
+
+  getMetricsFormatted: publicProcedure.query(() => {
+    const metrics = calculateAllMetrics();
+    return {
+      metrics,
+      formatted: formatMetricsForDisplay(metrics),
+    };
   }),
 });
 
