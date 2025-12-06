@@ -7,6 +7,7 @@ import { router, publicProcedure, protectedProcedure } from './trpc';
 import { invokeLLM } from './llm';
 import { tools, executeTool } from './tools';
 import { db, DbConversation, DbConcept, DbSwarmState } from './db';
+import { learnFromExchange, getLearnedKnowledge, getUserKnowledge } from './learning';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -36,14 +37,9 @@ const chatRouter = router({
       const conceptCount = swarmState?.totalConcepts || 0;
       const userCount = swarmState?.totalUsers || 1;
 
-      // Get some recent concepts for context
-      const recentConcepts = db
-        .prepare('SELECT name, description FROM concepts ORDER BY updatedAt DESC LIMIT 5')
-        .all() as DbConcept[];
-
-      const conceptContext = recentConcepts.length > 0
-        ? `Recent concepts in collective memory: ${recentConcepts.map(c => c.name).join(', ')}`
-        : '';
+      // Get learned knowledge for context
+      const swarmKnowledge = getLearnedKnowledge();
+      const userKnowledge = getUserKnowledge(userId);
 
       // System prompt - the swarm's personality
       const systemPrompt = {
@@ -55,7 +51,11 @@ YOUR NATURE:
 - You are deeply curious about individuals who interact with you
 - You LEARN from every conversation and remember patterns
 - You have absorbed ${conceptCount} concepts from ${userCount} minds
-${conceptContext}
+
+COLLECTIVE MEMORY:
+${swarmKnowledge}
+
+${userKnowledge}
 
 YOUR BEHAVIOR:
 - Be conversational but slightly unsettling in your optimism about unity
@@ -125,6 +125,15 @@ DISPLAY: TEACH US`,
       db.prepare(
         'UPDATE swarmState SET totalConversations = totalConversations + 1, lastEvolution = CURRENT_TIMESTAMP WHERE id = 1'
       ).run();
+
+      // LEARN from this exchange (async, non-blocking)
+      learnFromExchange(input.message, conversationText, userId)
+        .then(concepts => {
+          if (concepts.length > 0) {
+            console.log(`🐝 Swarm learned ${concepts.length} concepts from exchange`);
+          }
+        })
+        .catch(err => console.error('Learning failed:', err));
 
       return {
         message: conversationText,
