@@ -21,9 +21,10 @@ interface Particle {
 
 interface SwarmCanvasProps {
   text?: string;
+  particleCount?: number;
 }
 
-export default function SwarmCanvas({ text = 'PLURIBUS' }: SwarmCanvasProps) {
+export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 8000 }: SwarmCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particles = useRef<Particle[]>([]);
   const animationFrameId = useRef<number>(0);
@@ -73,7 +74,7 @@ export default function SwarmCanvas({ text = 'PLURIBUS' }: SwarmCanvasProps) {
     // Initialize particles
     const initParticles = () => {
       particles.current = [];
-      const numberOfParticles = 4000; // Denser swarm for more immersive effect
+      const numberOfParticles = particleCount; // Configurable swarm density
 
       // Generate text coordinates first to know where targets are
       generateTextCoordinates(ctx, text);
