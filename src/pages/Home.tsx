@@ -1,8 +1,9 @@
-import SwarmCanvas from "@/components/SwarmCanvas";
+import SwarmCanvas from "@/components/SwarmCanvas";  // JS version (Rust WIP)
+// import SwarmCanvas from "@/components/SwarmCanvasRust";  // Rust/WASM version (WIP)
 import SwarmChat from "@/components/SwarmChat";
-import WelcomeModal from "@/components/WelcomeModal";
+import { getVisitorIdentity, saveVisitorName } from "@/components/WelcomeModal";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { MessageSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -10,27 +11,43 @@ import { getLoginUrl } from "@/const";
 
 export default function Home() {
   const [showChat, setShowChat] = useState(false);
-  const [currentText, setCurrentText] = useState("PLURIBUS");
+  const [currentText, setCurrentText] = useState<string | string[]>("PLURIBUS");
   const [visitorName, setVisitorName] = useState<string | null>(null);
-  const [showWelcome, setShowWelcome] = useState(true);
   const { isAuthenticated } = useAuth();
 
-  const handleWelcomeComplete = useCallback((name: string, isNew: boolean) => {
-    setVisitorName(name);
-    setShowWelcome(false);
+  // Track if we're in the initial greeting phase (don't let chat override)
+  const [greetingPhase, setGreetingPhase] = useState(true);
+
+  // On mount, check visitor identity and let the SWARM greet them
+  useEffect(() => {
+    const visitor = getVisitorIdentity();
     
-    // Set the display text based on whether they're new or returning
-    if (isNew) {
-      setCurrentText(`WELCOME ${name.toUpperCase()}`);
+    if (visitor.name) {
+      // Known visitor - swarm greets them directly
+      setVisitorName(visitor.name);
+      setCurrentText(`HELLO ${visitor.name.toUpperCase()}`);
     } else {
-      setCurrentText(`HELLO ${name.toUpperCase()}`);
+      // New visitor - swarm welcomes them
+      setCurrentText("WELCOME");
+      // Save a default name for now (they can update via chat)
+      saveVisitorName("STRANGER");
+      setVisitorName("STRANGER");
     }
     
-    // After a few seconds, return to PLURIBUS
-    setTimeout(() => {
-      setCurrentText("PLURIBUS");
-    }, 4000);
+    // After 5 seconds, allow chat to update the display text
+    const timer = setTimeout(() => {
+      setGreetingPhase(false);
+    }, 5000);
+    
+    return () => clearTimeout(timer);
   }, []);
+  
+  // Handler that respects the greeting phase
+  const handleDisplayTextChange = useCallback((text: string) => {
+    if (!greetingPhase) {
+      setCurrentText(text);
+    }
+  }, [greetingPhase]);
 
   const handleChatToggle = () => {
     if (!isAuthenticated) {
@@ -42,8 +59,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full bg-black overflow-hidden relative">
-      {/* Welcome Modal for new/returning visitors */}
-      {showWelcome && <WelcomeModal onComplete={handleWelcomeComplete} />}
+      {/* The swarm greets visitors directly - no modal needed */}
       
       <SwarmCanvas text={currentText} />
       
@@ -94,7 +110,7 @@ export default function Home() {
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="fixed inset-0 md:absolute md:top-0 md:right-0 md:bottom-0 md:left-auto md:h-full w-full md:w-[28rem] bg-black/95 md:bg-black/90 backdrop-blur-md md:border-l border-white/10 pointer-events-auto z-50"
           >
-            <SwarmChat onDisplayTextChange={setCurrentText} />
+            <SwarmChat onDisplayTextChange={handleDisplayTextChange} />
           </motion.div>
         )}
       </AnimatePresence>

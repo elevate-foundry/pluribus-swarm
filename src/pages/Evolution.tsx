@@ -30,8 +30,20 @@ export default function Evolution() {
   
   useEffect(() => {
     if (metricsData) {
-      setMetrics(metricsData.metrics);
-      setWarnings(metricsData.warnings);
+      // API returns metrics directly, not wrapped in { metrics, warnings }
+      setMetrics(metricsData);
+      // Generate warnings client-side based on metric values
+      const newWarnings: string[] = [];
+      if (metricsData.semanticDrift > 0.8 && metricsData.graphEntropyChange > 0.5) {
+        newWarnings.push('⚠️ Runaway drift: Concepts changing too rapidly');
+      }
+      if (metricsData.compressionRate > 0.7 && metricsData.lifeworldComplexity < 3) {
+        newWarnings.push('⚠️ Mode collapse risk: Over-compressing');
+      }
+      if (metricsData.curvature > 0.8) {
+        newWarnings.push('⚠️ High curvature: Clusters may be dissolving');
+      }
+      setWarnings(newWarnings);
     }
   }, [metricsData]);
   

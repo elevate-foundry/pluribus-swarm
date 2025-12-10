@@ -20,7 +20,7 @@ interface Particle {
 }
 
 interface SwarmCanvasProps {
-  text?: string;
+  text?: string | string[];  // Can be single text or array of texts
   particleCount?: number | 'auto';
 }
 
@@ -54,14 +54,14 @@ function calculateOptimalParticleCount(): number {
   // Adjust for screen size
   optimalCount *= screenFactor;
   
-  // Mobile penalty (GPUs are weaker)
+  // Mobile penalty (GPUs are weaker, screens smaller)
   if (isMobile) {
-    optimalCount *= 0.4;
+    optimalCount *= 0.25;
   }
   
   // Clamp to reasonable range
-  const minParticles = 2000;
-  const maxParticles = 50000;
+  const minParticles = isMobile ? 3000 : 8000;
+  const maxParticles = isMobile ? 8000 : 20000;
   optimalCount = Math.max(minParticles, Math.min(maxParticles, optimalCount));
   
   console.log(`🐝 Particle calculation:
@@ -98,7 +98,8 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
   const lastPinchDistance = useRef<number | null>(null);
   const textCoordinates = useRef<{ x: number; y: number }[]>([]);
   const timeRef = useRef<number>(0);
-  const currentTextRef = useRef<string>(text);
+  const currentTextRef = useRef<string>(Array.isArray(text) ? text.join('|') : (text || 'PLURIBUS'));
+  const pendingTextRef = useRef<string | null>(null);  // Store text changes that arrive before particles init
   const quadtree = useRef<Quadtree<Particle> | null>(null);
 
   useEffect(() => {
@@ -130,11 +131,18 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
       // Regenerate text coordinates
       generateTextCoordinates(ctx, newText);
       
+      // Shuffle text coordinates to distribute particles evenly across the text
+      const shuffledCoords = [...textCoordinates.current];
+      for (let i = shuffledCoords.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledCoords[i], shuffledCoords[j]] = [shuffledCoords[j], shuffledCoords[i]];
+      }
+      
       // Reassign targets to existing particles
       particles.current.forEach((p, i) => {
-        if (i < textCoordinates.current.length) {
-          p.targetX = textCoordinates.current[i].x;
-          p.targetY = textCoordinates.current[i].y;
+        if (i < shuffledCoords.length) {
+          p.targetX = shuffledCoords[i].x;
+          p.targetY = shuffledCoords[i].y;
           p.isForming = true;
         } else {
           // Extra particles float around
@@ -146,10 +154,25 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
     // Initialize particles
     const initParticles = () => {
       particles.current = [];
-      const numberOfParticles = particleCountRef.current; // Auto-calculated or specified
-
+      
       // Generate text coordinates first to know where targets are
-      generateTextCoordinates(ctx, text);
+      const initialText = Array.isArray(text) ? text[0] || 'PLURIBUS' : (text || 'PLURIBUS');
+      generateTextCoordinates(ctx, initialText);
+      
+      // Use the larger of: auto-calculated count OR text coordinates needed
+      const numberOfParticles = Math.max(particleCountRef.current, textCoordinates.current.length);
+      swarmLog('Particle count adjusted:', { 
+        requested: particleCountRef.current, 
+        textCoords: textCoordinates.current.length,
+        using: numberOfParticles 
+      });
+
+      // Shuffle text coordinates so particles are distributed evenly across the text
+      const shuffledCoords = [...textCoordinates.current];
+      for (let i = shuffledCoords.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledCoords[i], shuffledCoords[j]] = [shuffledCoords[j], shuffledCoords[i]];
+      }
 
       for (let i = 0; i < numberOfParticles; i++) {
         const x = Math.random() * canvas.width;
@@ -160,9 +183,9 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
         let targetY = y;
         let isForming = false;
 
-        if (i < textCoordinates.current.length) {
-          targetX = textCoordinates.current[i].x;
-          targetY = textCoordinates.current[i].y;
+        if (i < shuffledCoords.length) {
+          targetX = shuffledCoords[i].x;
+          targetY = shuffledCoords[i].y;
           isForming = true;
         } else {
            // Extra particles float around
@@ -221,6 +244,18 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
           attractionStrength,
         });
       }
+      
+      // Check if there's a pending text update that arrived before particles were ready
+      if (pendingTextRef.current && pendingTextRef.current !== currentTextRef.current) {
+        swarmLog('Applying pending text after init:', pendingTextRef.current);
+        // Trigger the text change handler via a small delay to ensure particles are fully set up
+        setTimeout(() => {
+          if (pendingTextRef.current) {
+            handleTextChange(pendingTextRef.current);
+            pendingTextRef.current = null;
+          }
+        }, 100);
+      }
     };
 
     const generateTextCoordinates = (ctx: CanvasRenderingContext2D, text: string) => {
@@ -242,7 +277,9 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
 
       // Scan the canvas for pixel data
       // Optimization: scan every nth pixel to reduce count
-      const gap = 4; 
+      // Larger gap on mobile for clearer text
+      const isMobileView = canvas.width < 768;
+      const gap = isMobileView ? 12 : 8; 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const buffer = new Uint32Array(imageData.data.buffer);
 
@@ -342,7 +379,12 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
         // Draw particle
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = 'white';
+        // Forming particles are bright white, floating particles are dim
+        if (p.isForming) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        }
         ctx.fill();
       });
 
@@ -451,9 +493,12 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
     canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
     canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
-    // Initial setup
-    resizeCanvas();
-    animate();
+    // Wait for font to load before initializing
+    document.fonts.ready.then(() => {
+      console.log('🐝 Fonts loaded, initializing swarm...');
+      resizeCanvas();
+      animate();
+    });
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
@@ -467,7 +512,7 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
     };
   }, []);
 
-  // Watch for text changes
+  // Watch for text changes - supports multiple texts displayed vertically
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -480,26 +525,42 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
       return;
     }
     
-    // Guard against empty or invalid text
-    const safeText = text && text.trim() ? text.trim() : 'PLURIBUS';
+    // Normalize text to array
+    const textArray = Array.isArray(text) ? text : [text];
+    const safeTexts = textArray
+      .map(t => (t && t.trim()) || '')
+      .filter(t => t.length > 0);
+    
+    if (safeTexts.length === 0) {
+      safeTexts.push('PLURIBUS');
+    }
+    
+    const textKey = safeTexts.join('|');
     swarmLog('Processing text change:', { 
-      originalText: text, 
-      safeText, 
+      texts: safeTexts,
+      textKey,
       currentRef: currentTextRef.current,
-      willUpdate: safeText !== currentTextRef.current 
+      willUpdate: textKey !== currentTextRef.current 
     });
     
-    if (safeText !== currentTextRef.current) {
-      currentTextRef.current = safeText;
+    if (textKey !== currentTextRef.current) {
+      currentTextRef.current = textKey;
       
       // Clear and regenerate text coordinates
       textCoordinates.current = [];
       
-      // Ensure canvas is sized - if not, size it now
-      if (canvas.width === 0 || canvas.height === 0) {
+      // Ensure canvas is properly sized (not default 300x150)
+      if (canvas.width <= 300 || canvas.height <= 150) {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        swarmLog('Canvas was not sized, setting now:', { width: canvas.width, height: canvas.height });
+        swarmLog('Canvas resized to window:', { width: canvas.width, height: canvas.height });
+      }
+      
+      // If no particles exist yet, store as pending and return
+      if (particles.current.length === 0) {
+        pendingTextRef.current = textKey;
+        swarmLog('Storing pending text update - particles not initialized yet:', textKey);
+        return;
       }
       
       const width = canvas.width;
@@ -507,18 +568,31 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
       
       swarmLog('Canvas dimensions:', { width, height });
       
-      // Draw text to get coordinates
-      ctx.fillStyle = 'white';
-      const fontSize = Math.min(width / 8, 150);
-      ctx.font = `700 ${fontSize}px 'Cinzel', serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const centerX = width / 2;
-      const centerY = height / 2;
-      ctx.fillText(safeText, centerX, centerY);
+      // Calculate layout for multiple texts
+      const numTexts = safeTexts.length;
+      const verticalSpacing = height / (numTexts + 1);
       
-      // Scan for pixels
-      const gap = 4;
+      // Draw each text and collect coordinates
+      safeTexts.forEach((displayText, index) => {
+        ctx.fillStyle = 'white';
+        // Smaller font for multiple texts
+        const fontSize = Math.min(width / (8 + numTexts * 2), 150 / Math.sqrt(numTexts));
+        ctx.font = `700 ${fontSize}px 'Cinzel', serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const centerX = width / 2;
+        const centerY = verticalSpacing * (index + 1);
+        
+        ctx.fillText(displayText, centerX, centerY);
+        
+        swarmLog(`Text ${index + 1}/${numTexts}:`, { displayText, fontSize, centerY });
+      });
+      
+      // Scan for all pixels - larger gap = fewer particles needed
+      // Larger gap on mobile for clearer text
+      const isMobileView = width < 768;
+      const gap = isMobileView ? 12 : 8;
       const imageData = ctx.getImageData(0, 0, width, height);
       const buffer = new Uint32Array(imageData.data.buffer);
       for (let y = 0; y < height; y += gap) {
@@ -530,33 +604,88 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
       }
       ctx.clearRect(0, 0, width, height);
       
-      // Log some sample coordinates to verify they're centered
-      const sampleCoords = textCoordinates.current.slice(0, 5);
-      const avgY = textCoordinates.current.length > 0 
-        ? textCoordinates.current.reduce((sum, c) => sum + c.y, 0) / textCoordinates.current.length 
-        : 0;
-      
-      swarmLog('Text rendered:', { 
-        displayText: safeText, 
-        fontSize, 
-        center: { centerX, centerY }, 
-        pixelsFound: textCoordinates.current.length,
-        avgY: Math.round(avgY),
-        expectedCenterY: Math.round(height / 2),
-        sampleCoords
+      swarmLog('All texts rendered:', { 
+        texts: safeTexts,
+        pixelsFound: textCoordinates.current.length
       });
       
-      // Reassign targets to existing particles
+      // Match particles to nearest target positions for smooth morphing
+      // This creates a fluid transition between text shapes
+      const coords = [...textCoordinates.current];
+      const numToAssign = Math.min(particles.current.length, coords.length);
+      
+      // For each particle, find a nearby target (greedy nearest-neighbor)
+      // To avoid O(n²), we'll use a grid-based approach
+      const gridSize = 50;
+      const grid: Map<string, { x: number; y: number; idx: number }[]> = new Map();
+      
+      coords.forEach((c, idx) => {
+        const key = `${Math.floor(c.x / gridSize)},${Math.floor(c.y / gridSize)}`;
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key)!.push({ ...c, idx });
+      });
+      
+      const usedCoords = new Set<number>();
+      const assignments: { x: number; y: number }[] = new Array(particles.current.length);
+      
+      // First pass: assign particles to nearby targets
+      particles.current.forEach((p, i) => {
+        if (i >= numToAssign) return;
+        
+        const gx = Math.floor(p.x / gridSize);
+        const gy = Math.floor(p.y / gridSize);
+        
+        let bestDist = Infinity;
+        let bestCoord: { x: number; y: number; idx: number } | null = null;
+        
+        // Search nearby grid cells
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dy = -2; dy <= 2; dy++) {
+            const cell = grid.get(`${gx + dx},${gy + dy}`);
+            if (!cell) continue;
+            for (const c of cell) {
+              if (usedCoords.has(c.idx)) continue;
+              const dist = (p.x - c.x) ** 2 + (p.y - c.y) ** 2;
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestCoord = c;
+              }
+            }
+          }
+        }
+        
+        if (bestCoord) {
+          assignments[i] = { x: bestCoord.x, y: bestCoord.y };
+          usedCoords.add(bestCoord.idx);
+        }
+      });
+      
+      // Second pass: assign remaining particles to any unused coords
+      let unusedIdx = 0;
+      particles.current.forEach((p, i) => {
+        if (assignments[i]) return;
+        if (i >= numToAssign) return;
+        
+        while (unusedIdx < coords.length && usedCoords.has(unusedIdx)) {
+          unusedIdx++;
+        }
+        if (unusedIdx < coords.length) {
+          assignments[i] = coords[unusedIdx];
+          usedCoords.add(unusedIdx);
+          unusedIdx++;
+        }
+      });
+      
+      // Reassign targets to existing particles (use what we have, don't add more)
       let formingCount = 0;
       let floatingCount = 0;
       particles.current.forEach((p, i) => {
-        if (i < textCoordinates.current.length) {
-          p.targetX = textCoordinates.current[i].x;
-          p.targetY = textCoordinates.current[i].y;
+        if (assignments[i]) {
+          p.targetX = assignments[i].x;
+          p.targetY = assignments[i].y;
           p.isForming = true;
           formingCount++;
         } else {
-          // Extra particles float around
           p.isForming = false;
           floatingCount++;
         }

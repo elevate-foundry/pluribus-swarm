@@ -178,9 +178,45 @@ export function getUserKnowledge(userId: number): string {
     `)
     .all(userId) as Array<{ name: string; description: string; strength: number }>;
 
-  if (concepts.length === 0) {
-    return '';
+  // Also scan recent conversation history for personal facts
+  const recentMessages = db
+    .prepare(`
+      SELECT content FROM conversations 
+      WHERE userId = ? AND role = 'user'
+      ORDER BY createdAt DESC LIMIT 20
+    `)
+    .all(userId) as Array<{ content: string }>;
+  
+  // Extract name mentions from conversation history
+  const namePatterns = [
+    /my name is (\w+)/i,
+    /i'm (\w+)/i,
+    /i am (\w+)/i,
+    /call me (\w+)/i,
+    /name's (\w+)/i,
+  ];
+  
+  let userName: string | null = null;
+  for (const msg of recentMessages) {
+    for (const pattern of namePatterns) {
+      const match = msg.content.match(pattern);
+      if (match) {
+        userName = match[1];
+        break;
+      }
+    }
+    if (userName) break;
   }
 
-  return `What we know about this individual: ${concepts.map(c => c.name).join(', ')}`;
+  const parts: string[] = [];
+  
+  if (userName) {
+    parts.push(`This individual's name is ${userName}.`);
+  }
+  
+  if (concepts.length > 0) {
+    parts.push(`What we know about them: ${concepts.map(c => `${c.name} (${c.description})`).join('; ')}`);
+  }
+
+  return parts.length > 0 ? `ABOUT THIS USER:\n${parts.join('\n')}` : '';
 }

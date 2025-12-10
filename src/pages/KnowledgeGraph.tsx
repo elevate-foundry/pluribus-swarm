@@ -4,16 +4,21 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 
-interface Node {
+interface Concept {
   id: number;
   name: string;
+  description?: string;
   category: string | null;
-  semanticDensity: number | null;
+  density: number | null;
   occurrences: number | null;
+}
+
+interface Node extends Concept {
   x?: number;
   y?: number;
   vx?: number;
   vy?: number;
+  semanticDensity?: number | null;
 }
 
 interface Edge {
@@ -27,11 +32,12 @@ export default function KnowledgeGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredNode, setHoveredNode] = useState<Node | null>(null);
   
-  const { data: graphData, isLoading } = trpc.chat.getConceptGraph.useQuery();
+  const { data: conceptsData, isLoading } = trpc.chat.getConceptGraph.useQuery();
   const { data: stats } = trpc.chat.getSwarmStats.useQuery();
 
   useEffect(() => {
-    if (!graphData || !canvasRef.current) return;
+    // API returns array of concepts directly, not { nodes, edges }
+    if (!conceptsData || !Array.isArray(conceptsData) || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
@@ -45,16 +51,25 @@ export default function KnowledgeGraph() {
     const width = canvas.offsetWidth;
     const height = canvas.offsetHeight;
 
-    // Initialize node positions
-    const nodes: Node[] = graphData.nodes.map((n) => ({
-      ...n,
+    // Initialize node positions from concepts array
+    const nodes: Node[] = conceptsData.map((c: Concept) => ({
+      ...c,
+      semanticDensity: c.density,
       x: Math.random() * width,
       y: Math.random() * height,
       vx: 0,
       vy: 0,
     }));
 
-    const edges: Edge[] = graphData.edges;
+    // Create edges between concepts in same category
+    const edges: Edge[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (nodes[i].category && nodes[i].category === nodes[j].category) {
+          edges.push({ from: nodes[i].id, to: nodes[j].id, type: 'category', weight: 1 });
+        }
+      }
+    }
 
     // Force-directed layout simulation
     const simulate = () => {
@@ -193,7 +208,7 @@ export default function KnowledgeGraph() {
       cancelAnimationFrame(animationId);
       canvas.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [graphData]);
+  }, [conceptsData]);
 
   if (isLoading) {
     return (

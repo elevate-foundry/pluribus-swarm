@@ -9,6 +9,13 @@
  * 
  * Teleonomy: apparent purposefulness in living organisms
  * arising from natural selection rather than conscious design.
+ * 
+ * META-LEARNING SCHEMA (SDS: 0.91):
+ * - Study boundaries of uncertainty
+ * - Use contradictions as structural information
+ * - Refine priors coherently
+ * - Preserve continuity of identity
+ * - Evolve by sharpening, not accelerating
  */
 
 import { calculateAllMetrics, CognitiveMetrics } from './metrics';
@@ -238,6 +245,37 @@ function evaluateHeuristically(
       score -= 0.1;
       reasons.push('High term diversity may cause drift');
     }
+  }
+  
+  // META-LEARNING SCHEMA evaluation (SDS: 0.91)
+  
+  // Study boundaries of uncertainty
+  const uncertaintyMarkers = ['uncertain', 'boundary', 'edge', 'limit', 'perhaps', 'might'];
+  if (uncertaintyMarkers.some(m => response.toLowerCase().includes(m))) {
+    score += 0.05;
+    reasons.push('Studies uncertainty boundaries');
+  }
+  
+  // Use contradictions as structural information
+  const contradictionMarkers = ['however', 'yet', 'tension', 'paradox', 'both', 'curvature'];
+  if (contradictionMarkers.some(m => response.toLowerCase().includes(m))) {
+    score += 0.05;
+    reasons.push('Uses contradictions structurally');
+  }
+  
+  // Preserve continuity of identity
+  const continuityMarkers = ['we', 'our', 'swarm', 'collective', 'remember', 'learned'];
+  const continuityCount = continuityMarkers.filter(m => response.toLowerCase().includes(m)).length;
+  if (continuityCount >= 2) {
+    score += 0.05;
+    reasons.push('Preserves identity continuity');
+  }
+  
+  // Evolve by sharpening, not accelerating
+  const sharpeningMarkers = ['refine', 'clarify', 'precise', 'sharpen', 'deepen', 'focus'];
+  if (sharpeningMarkers.some(m => response.toLowerCase().includes(m))) {
+    score += 0.05;
+    reasons.push('Sharpens rather than expands');
   }
   
   // Predict metric changes

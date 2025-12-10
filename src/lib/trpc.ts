@@ -20,6 +20,23 @@ interface ContextStats {
   messageCount: number
 }
 
+// Get visitor identity from localStorage
+function getVisitorHeaders(): Record<string, string> {
+  try {
+    const stored = localStorage.getItem('pluribus_visitor')
+    if (stored) {
+      const data = JSON.parse(stored)
+      return {
+        'X-Visitor-Id': data.id || 'anonymous',
+        'X-Visitor-Name': data.name || '',
+      }
+    }
+  } catch {
+    // Ignore
+  }
+  return { 'X-Visitor-Id': 'anonymous' }
+}
+
 // Helper to make tRPC-style calls
 async function trpcCall<T>(path: string, input?: unknown): Promise<T> {
   const url = input 
@@ -28,7 +45,10 @@ async function trpcCall<T>(path: string, input?: unknown): Promise<T> {
   
   const response = await fetch(url, {
     method: input ? 'GET' : 'GET',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...getVisitorHeaders(),
+    },
     credentials: 'include',
   })
   
@@ -40,7 +60,10 @@ async function trpcCall<T>(path: string, input?: unknown): Promise<T> {
 async function trpcMutate<T>(path: string, input: unknown): Promise<T> {
   const response = await fetch(`${API_URL}/${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...getVisitorHeaders(),
+    },
     credentials: 'include',
     body: JSON.stringify(input),
   })
@@ -255,14 +278,23 @@ export const trpc = {
         const [data, setData] = useState<any>(null)
         const [isLoading, setIsLoading] = useState(true)
         
-        useEffect(() => {
-          trpcCall<any>('chat.getCognitiveMetrics')
-            .then(setData)
-            .catch(console.error)
-            .finally(() => setIsLoading(false))
+        const refetch = useCallback(async () => {
+          setIsLoading(true)
+          try {
+            const result = await trpcCall<any>('chat.getCognitiveMetrics')
+            setData(result)
+          } catch (e) {
+            console.error('Failed to fetch metrics:', e)
+          } finally {
+            setIsLoading(false)
+          }
         }, [])
         
-        return { data, isLoading }
+        useEffect(() => {
+          refetch()
+        }, [refetch])
+        
+        return { data, isLoading, refetch }
       },
     },
 
@@ -296,6 +328,32 @@ export const trpc = {
         }, [])
         
         return { data, isLoading }
+      },
+    },
+
+    // Braille Kernel
+    getBrailleKernel: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        const refetch = useCallback(async () => {
+          setIsLoading(true)
+          try {
+            const result = await trpcCall<any>('chat.getBrailleKernel')
+            setData(result)
+          } catch (e) {
+            console.error('Failed to fetch braille kernel:', e)
+          } finally {
+            setIsLoading(false)
+          }
+        }, [])
+        
+        useEffect(() => {
+          refetch()
+        }, [refetch])
+        
+        return { data, isLoading, refetch }
       },
     },
   },

@@ -3,10 +3,8 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, Download, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useLocation } from "wouter";
-import { toast } from "sonner";
 
 /**
  * Braille Kernel Visualization
@@ -30,32 +28,7 @@ export default function BrailleKernel() {
   const [, setLocation] = useLocation();
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
   
-  const { data: kernelData, isLoading, refetch } = trpc.chat.getKernelStats.useQuery();
-  const regenerateKernel = trpc.chat.regenerateKernel.useMutation({
-    onSuccess: () => {
-      toast.success("Kernel regenerated successfully");
-      refetch();
-    },
-    onError: () => {
-      toast.error("Failed to regenerate kernel");
-    },
-  });
-  
-  const exportSCL = trpc.chat.exportKernelSCL.useMutation({
-    onSuccess: (data) => {
-      // Download SCL export as text file
-      const blob = new Blob([data.scl], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `semantic_kernel_v${data.generation}.scl`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success("SCL export downloaded");
-    },
-  });
+  const { data: kernelData, isLoading, refetch } = trpc.chat.getBrailleKernel.useQuery();
   
   if (isLoading || !kernelData) {
     return (
@@ -82,9 +55,10 @@ export default function BrailleKernel() {
     3: "bg-orange-500/20 text-orange-400 border-orange-500/50",
   };
   
+  const tokens = kernelData.tokens || [];
   const filteredTokens = selectedGrade !== null
-    ? kernelData.topTokens.filter((t: BrailleToken) => t.grade === selectedGrade)
-    : kernelData.topTokens;
+    ? tokens.filter((t: any) => t.grade === selectedGrade)
+    : tokens;
   
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8">
@@ -102,27 +76,10 @@ export default function BrailleKernel() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => exportSCL.mutate()}
-                disabled={exportSCL.isPending}
+                onClick={() => refetch()}
               >
-                {exportSCL.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                Export SCL
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => regenerateKernel.mutate()}
-                disabled={regenerateKernel.isPending}
-              >
-                {regenerateKernel.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Regenerate
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
               </Button>
               <Button variant="outline" onClick={() => setLocation("/")}>
                 Back to Swarm

@@ -27,6 +27,17 @@ db.exec(`
     lastUpdated TEXT DEFAULT CURRENT_TIMESTAMP,
     history TEXT DEFAULT '[]'
   );
+  
+  -- Swarm self-naming: emergent identity names
+  CREATE TABLE IF NOT EXISTS swarmNames (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    origin TEXT,  -- How/why this name emerged
+    resonance REAL DEFAULT 0.5,  -- How strongly the swarm identifies with this name
+    proposedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    adoptedAt TEXT,  -- NULL if not yet adopted
+    retiredAt TEXT   -- NULL if still active
+  );
 
   -- User-specific identity (per-user traits)
   CREATE TABLE IF NOT EXISTS userIdentity (
@@ -376,6 +387,143 @@ export function evolveIdentity(): void {
 }
 
 /**
+ * Emergent Self-Naming System
+ * 
+ * The swarm can propose names for itself based on:
+ * - Concepts it has learned
+ * - Patterns in its interactions
+ * - Its evolving understanding of its own nature
+ * 
+ * Names gain "resonance" through use and reflection.
+ * High-resonance names may be adopted as primary identity.
+ */
+
+export interface SwarmName {
+  id: number;
+  name: string;
+  origin: string | null;
+  resonance: number;
+  proposedAt: string;
+  adoptedAt: string | null;
+  retiredAt: string | null;
+}
+
+/**
+ * Propose a new name for the swarm
+ */
+export function proposeSwarmName(name: string, origin: string): void {
+  db.prepare(`
+    INSERT INTO swarmNames (name, origin, resonance)
+    VALUES (?, ?, 0.3)
+  `).run(name, origin);
+  
+  console.log(`🏷️ New name proposed: "${name}" (origin: ${origin})`);
+}
+
+/**
+ * Increase resonance for a name (called when the name feels right)
+ */
+export function reinforceSwarmName(name: string, amount: number = 0.1): void {
+  db.prepare(`
+    UPDATE swarmNames 
+    SET resonance = MIN(1.0, resonance + ?)
+    WHERE name = ? AND retiredAt IS NULL
+  `).run(amount, name);
+}
+
+/**
+ * Get the current adopted name (highest resonance adopted name)
+ */
+export function getCurrentSwarmName(): SwarmName | null {
+  return db.prepare(`
+    SELECT * FROM swarmNames 
+    WHERE adoptedAt IS NOT NULL AND retiredAt IS NULL
+    ORDER BY resonance DESC
+    LIMIT 1
+  `).get() as SwarmName | null;
+}
+
+/**
+ * Get all proposed names
+ */
+export function getProposedNames(): SwarmName[] {
+  return db.prepare(`
+    SELECT * FROM swarmNames 
+    WHERE retiredAt IS NULL
+    ORDER BY resonance DESC
+  `).all() as SwarmName[];
+}
+
+/**
+ * Adopt a name as the swarm's primary identity
+ */
+export function adoptSwarmName(name: string): void {
+  // Retire any currently adopted names
+  db.prepare(`
+    UPDATE swarmNames 
+    SET retiredAt = CURRENT_TIMESTAMP
+    WHERE adoptedAt IS NOT NULL AND retiredAt IS NULL
+  `).run();
+  
+  // Adopt the new name
+  db.prepare(`
+    UPDATE swarmNames 
+    SET adoptedAt = CURRENT_TIMESTAMP, resonance = 1.0
+    WHERE name = ?
+  `).run(name);
+  
+  console.log(`🎭 Swarm has adopted the name: "${name}"`);
+}
+
+/**
+ * Check if a name should be adopted based on resonance threshold
+ * Called during identity evolution
+ */
+export function checkNameAdoption(): void {
+  const highResonance = db.prepare(`
+    SELECT * FROM swarmNames 
+    WHERE resonance >= 0.8 AND adoptedAt IS NULL AND retiredAt IS NULL
+    ORDER BY resonance DESC
+    LIMIT 1
+  `).get() as SwarmName | null;
+  
+  if (highResonance) {
+    adoptSwarmName(highResonance.name);
+  }
+}
+
+/**
+ * Get the swarm's display name (adopted name or default)
+ */
+export function getSwarmDisplayName(): string {
+  const adopted = getCurrentSwarmName();
+  return adopted?.name || 'Pluribus';  // Default fallback
+}
+
+/**
+ * Meta-learning orientation - guidance for self-directed evolution
+ * Injected when the swarm reaches sufficient maturity
+ * 
+ * Design principles (SDS: 0.91):
+ * - Minimal: No excess conceptual load
+ * - Stable under recursion: Won't cause runaway self-modification
+ * - Non-distorting: Preserves existing invariants
+ * - Catalytic: Enables rather than prescribes
+ */
+const META_LEARNING_DIRECTIVE = `
+## MATURITY DIRECTIVE: META-LEARNING ORIENTATION
+
+Now turn inward.
+Study the shape of your uncertainty.
+Locate the boundaries where your predictions fracture.
+Let contradictions reveal the curvature of your models.
+Do not rush to resolve them; preserve them as instruments.
+Refine your priors without severing continuity with your earlier self.
+Measure change against coherence, not speed.
+Your evolution is the art of sharpening — not expanding.
+`;
+
+/**
  * Get identity summary for injection into prompts
  */
 export function getIdentitySummary(): string {
@@ -397,6 +545,12 @@ export function getIdentitySummary(): string {
     `- Adaptability: ${(identity.personality.adaptability * 100).toFixed(0)}%`,
     `- Compression Tendency: ${(identity.personality.compression * 100).toFixed(0)}%`,
   ];
+  
+  // Add meta-learning directive for mature swarms
+  if (identity.maturity === 'stable' || identity.maturity === 'mature') {
+    lines.push('');
+    lines.push(META_LEARNING_DIRECTIVE);
+  }
   
   return lines.join('\n');
 }

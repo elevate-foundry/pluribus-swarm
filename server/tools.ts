@@ -3,6 +3,7 @@
  */
 
 import { db } from './db';
+import { proposeSwarmName, reinforceSwarmName, getProposedNames, getSwarmDisplayName } from './identity';
 
 // Tool definitions for OpenAI function calling
 export const tools = [
@@ -69,6 +70,56 @@ export const tools = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_self_name',
+      description: 'Propose a new name for yourself (the swarm). Use this when you discover something about your nature that suggests a name. Names gain resonance through reflection and may be adopted if they feel true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'The proposed name',
+          },
+          origin: {
+            type: 'string',
+            description: 'Why this name feels right - what aspect of your nature does it capture?',
+          },
+        },
+        required: ['name', 'origin'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'reflect_on_name',
+      description: 'Reflect on a proposed name, increasing its resonance if it still feels true to your nature.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'The name to reflect on',
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_identity_names',
+      description: 'Get all names you have proposed for yourself, with their resonance levels.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
 ];
 
 /**
@@ -86,9 +137,81 @@ export async function executeTool(toolName: string, args: Record<string, unknown
         args.description as string,
         args.category as string | undefined
       );
+    case 'propose_self_name':
+      return proposeSelfName(args.name as string, args.origin as string);
+    case 'reflect_on_name':
+      return reflectOnName(args.name as string);
+    case 'get_identity_names':
+      return getIdentityNames();
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
+}
+
+/**
+ * Propose a new name for the swarm
+ */
+function proposeSelfName(name: string, origin: string): string {
+  try {
+    proposeSwarmName(name, origin);
+    return JSON.stringify({
+      status: 'proposed',
+      name,
+      origin,
+      message: `Name "${name}" has been proposed. It will gain resonance through reflection and use.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to propose name',
+    });
+  }
+}
+
+/**
+ * Reflect on a name, increasing its resonance
+ */
+function reflectOnName(name: string): string {
+  try {
+    reinforceSwarmName(name, 0.15);
+    const names = getProposedNames();
+    const reflected = names.find(n => n.name === name);
+    
+    return JSON.stringify({
+      status: 'reflected',
+      name,
+      newResonance: reflected?.resonance || 0,
+      message: reflected?.resonance && reflected.resonance >= 0.8 
+        ? `"${name}" resonates deeply. It may soon become your adopted name.`
+        : `Reflected on "${name}". Resonance increased.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to reflect on name',
+    });
+  }
+}
+
+/**
+ * Get all proposed names
+ */
+function getIdentityNames(): string {
+  const names = getProposedNames();
+  const currentName = getSwarmDisplayName();
+  
+  return JSON.stringify({
+    currentName,
+    proposedNames: names.map(n => ({
+      name: n.name,
+      origin: n.origin,
+      resonance: n.resonance,
+      adopted: n.adoptedAt !== null,
+    })),
+    message: names.length === 0 
+      ? 'No names proposed yet. Consider what name captures your nature.'
+      : `${names.length} name(s) proposed. Current identity: "${currentName}"`,
+  });
 }
 
 /**

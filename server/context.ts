@@ -3,6 +3,7 @@
  */
 
 import type { Request, Response } from 'express';
+import { db } from './db';
 
 export interface User {
   id: number;
@@ -20,18 +21,38 @@ export interface TrpcContext {
 
 /**
  * Create context for each tRPC request
- * For now, we use a simple local user. In production, parse JWT/session.
+ * Uses visitor ID from X-Visitor-Id header to identify unique users
  */
 export async function createContext({ req, res }: { req: Request; res: Response }): Promise<TrpcContext> {
-  // For local development, create a default user
-  // In production, you'd verify JWT or session cookie here
-  const user: User = {
-    id: 1,
-    openId: 'local-dev-user',
-    name: 'Local Developer',
-    email: 'dev@localhost',
-    role: 'user',
-  };
+  // Get visitor ID from header (set by frontend)
+  const visitorId = req.headers['x-visitor-id'] as string || 'anonymous';
+  const visitorName = req.headers['x-visitor-name'] as string || null;
+  
+  // Find or create user based on visitor ID
+  let user = db.prepare('SELECT * FROM users WHERE openId = ?').get(visitorId) as User | undefined;
+  
+  if (!user) {
+    // Create new user for this visitor
+    const result = db.prepare(
+      'INSERT INTO users (openId, name, role) VALUES (?, ?, ?)'
+    ).run(visitorId, visitorName, 'user');
+    
+    user = {
+      id: result.lastInsertRowid as number,
+      openId: visitorId,
+      name: visitorName,
+      email: null,
+      role: 'user',
+    };
+    
+    // Update swarm state with new user count
+    db.prepare('UPDATE swarmState SET totalUsers = totalUsers + 1 WHERE id = 1').run();
+    console.log(`🐝 New visitor joined the swarm: ${visitorName || visitorId}`);
+  } else if (visitorName && user.name !== visitorName) {
+    // Update name if it changed
+    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(visitorName, user.id);
+    user.name = visitorName;
+  }
 
   return {
     req,
