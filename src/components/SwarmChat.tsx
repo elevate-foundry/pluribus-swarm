@@ -34,7 +34,7 @@ export default function SwarmChat({ onDisplayTextChange }: SwarmChatProps) {
     },
   });
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom and update display text from last assistant message
   useEffect(() => {
     if (scrollRef.current) {
       const scrollContainer = scrollRef.current.parentElement?.parentElement;
@@ -42,7 +42,15 @@ export default function SwarmChat({ onDisplayTextChange }: SwarmChatProps) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
     }
-  }, [history]);
+    
+    // Update display text from the last assistant message
+    if (history && history.length > 0) {
+      const lastAssistantMsg = [...history].reverse().find(m => m.role === 'assistant');
+      if (lastAssistantMsg?.displayText) {
+        onDisplayTextChange(lastAssistantMsg.displayText);
+      }
+    }
+  }, [history, onDisplayTextChange]);
 
   const handleSend = () => {
     if (!input.trim() || sendMessage.isPending) return;
