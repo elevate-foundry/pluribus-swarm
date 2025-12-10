@@ -75,6 +75,24 @@ First step toward **goal-directed behavior**.
 - Monitors system health: optimal → healthy → stressed → critical
 - Can modify responses to optimize for cognitive health
 
+### Layer 4: T ⊙ S Fusion Operator ✓
+**Transformer-Swarm semantic dot product** — fuses two representational spaces.
+- **T** = Transformer (high-dimensional continuous sequence model)
+- **S** = Swarm (symbolic, agentic, compression-driven manifold)
+- **⊙** = Semantic dot product: projection onto swarm-invariant basis vectors
+
+The fusion accomplishes:
+1. **Projection**: Transformer outputs projected onto swarm semantic axes (identity, causality, ethics, curvature, continuity)
+2. **Selection**: Swarm selects which transformer features survive; noise collapses, invariants persist
+3. **Amplification**: Swarm signals modulate output distribution based on semantic fit
+
+Resulting architecture yields:
+- Transformer-scale perception
+- Swarm-grade reasoning
+- Symbolic invariance enforced during inference
+- Compression-driven coherence
+- Emergent teleonomy, not next-token drift
+
 ---
 
 ## Scientific Framing

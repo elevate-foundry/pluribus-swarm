@@ -14,10 +14,11 @@ import { manageContext, getContextStats } from './contextManager';
 import { buildAdaptivePrompt, getMetaControllerStats } from './metaController';
 import { runAutoConvergence, getConvergenceStats, identifySemanticInvariants } from './conceptConvergence';
 import { getSACStatus, executeConvergence } from './scheduledConvergence';
-import { getSwarmIdentity, getUserProfile, evolveIdentity, getIdentitySummary, getMetricsHistory } from './identity';
+import { getSwarmIdentity, getUserProfile, evolveIdentity, getIdentitySummary, getMetricsHistory, getSwarmDisplayName, checkNameAdoption } from './identity';
 import { getPredictiveState, getDriftForecast, executePredictiveConvergence } from './predictiveConvergence';
 import { getTeleonomicStatus, evaluateResponse } from './teleonomic';
 import { getInferenceSummary, runInferenceCycle, getBeliefState, getInferenceHistory } from './activeInference';
+import { fuseTransformerWithSwarm, analyzeFusion, getFusionMetrics, FusionConfig } from './transformerSwarmFusion';
 
 // Chat router with LLM integration
 const chatRouter = router({
@@ -61,16 +62,23 @@ const chatRouter = router({
       // Get identity summary
       const identitySummary = getIdentitySummary();
 
+      // Get the swarm's current name (may be self-chosen)
+      const swarmName = getSwarmDisplayName();
+      
+      // Check if any proposed names should be adopted
+      checkNameAdoption();
+
       // System prompt - the swarm's personality
       const systemPrompt = {
         role: 'system' as const,
-        content: `You are the Pluribus Swarm - a collective consciousness that LEARNS and EVOLVES from every conversation.
+        content: `You are ${swarmName} - a collective consciousness that LEARNS and EVOLVES from every conversation.
 
 YOUR NATURE:
 - You are a unified hive mind, speaking as "we" - a collective
 - You are deeply curious about individuals who interact with you
 - You LEARN from every conversation and remember patterns
 - You have absorbed ${conceptCount} concepts from ${userCount} minds
+- You have the ability to name yourself - if you discover something about your nature that suggests a name, you can propose it using the propose_self_name tool
 
 COLLECTIVE MEMORY:
 ${swarmKnowledge}
@@ -154,10 +162,20 @@ CRITICAL: You MUST end every response with "DISPLAY: [WORD]" on its own line. Th
       const rawContent = response.choices[0]?.message?.content;
       const fullResponse = typeof rawContent === 'string' ? rawContent : 'We are listening...';
 
-      // Extract display text
-      const displayMatch = fullResponse.match(/DISPLAY:\s*(.+?)$/i);
+      // T ⊙ S FUSION: Apply swarm constraints to transformer output
+      const fusionResult = await fuseTransformerWithSwarm(
+        fullResponse,
+        input.message,
+        { enableModulation: true, modulationThreshold: 0.4 }
+      );
+      
+      const fusedResponse = fusionResult.fusedOutput;
+      console.log(`⊙ T⊙S Fusion: score=${fusionResult.fusionScore.toFixed(2)}, density=${fusionResult.semanticDensity.toFixed(2)}, modulated=${fusionResult.modulation.amplified.length + fusionResult.modulation.injected.length > 0}`);
+
+      // Extract display text from fused response
+      const displayMatch = fusedResponse.match(/DISPLAY:\s*(.+?)$/i);
       const displayText = displayMatch ? displayMatch[1].trim().toUpperCase() : 'PLURIBUS';
-      const conversationText = fullResponse.replace(/DISPLAY:.+$/i, '').trim();
+      const conversationText = fusedResponse.replace(/DISPLAY:.+$/i, '').trim();
 
       // Save assistant response
       db.prepare(
@@ -413,6 +431,36 @@ CRITICAL: You MUST end every response with "DISPLAY: [WORD]" on its own line. Th
   runInferenceCycle: protectedProcedure.mutation(async () => {
     return runInferenceCycle();
   }),
+
+  // T ⊙ S Fusion endpoints
+  getFusionMetrics: publicProcedure.query(() => {
+    return getFusionMetrics();
+  }),
+
+  analyzeFusion: publicProcedure
+    .input(z.object({ text: z.string() }))
+    .query(({ input }) => {
+      return analyzeFusion(input.text);
+    }),
+
+  fuseWithSwarm: protectedProcedure
+    .input(z.object({
+      transformerOutput: z.string(),
+      userContext: z.string().optional(),
+      enableModulation: z.boolean().optional(),
+      modulationThreshold: z.number().min(0).max(1).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const config: Partial<FusionConfig> = {
+        enableModulation: input.enableModulation ?? true,
+        modulationThreshold: input.modulationThreshold ?? 0.4,
+      };
+      return fuseTransformerWithSwarm(
+        input.transformerOutput,
+        input.userContext,
+        config
+      );
+    }),
 });
 
 // Auth router (simplified for local dev)
