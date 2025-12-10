@@ -74,8 +74,22 @@ function calculateOptimalParticleCount(): number {
   return Math.round(optimalCount);
 }
 
+// Debug logging for swarm state
+const DEBUG_SWARM = true;
+function swarmLog(message: string, data?: any) {
+  if (DEBUG_SWARM) {
+    console.log(`🐝 [SwarmCanvas] ${message}`, data !== undefined ? data : '');
+  }
+}
+
 export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' }: SwarmCanvasProps) {
-  const resolvedParticleCount = particleCount === 'auto' ? calculateOptimalParticleCount() : particleCount;
+  // Calculate particle count inside useEffect to ensure window is ready
+  const particleCountRef = useRef<number>(8000);
+  
+  // Log text prop changes
+  useEffect(() => {
+    swarmLog('Text prop changed:', { text, length: text?.length, type: typeof text });
+  }, [text]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particles = useRef<Particle[]>([]);
   const animationFrameId = useRef<number>(0);
@@ -93,6 +107,13 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Calculate optimal particle count now that window is ready
+    if (particleCount === 'auto') {
+      particleCountRef.current = calculateOptimalParticleCount();
+    } else {
+      particleCountRef.current = particleCount;
+    }
 
     // Set canvas size
     const resizeCanvas = () => {
@@ -125,7 +146,7 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
     // Initialize particles
     const initParticles = () => {
       particles.current = [];
-      const numberOfParticles = resolvedParticleCount; // Auto-calculated or specified
+      const numberOfParticles = particleCountRef.current; // Auto-calculated or specified
 
       // Generate text coordinates first to know where targets are
       generateTextCoordinates(ctx, text);
@@ -161,27 +182,27 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
         if (rand < 0.6) {
           // Scouts: fast, reactive, small
           type = 'scout';
-          maxSpeed = 3.5;
-          attractionStrength = 0.9; // Reduced from 1.2
+          maxSpeed = 6;  // Faster
+          attractionStrength = 1.5;
           size = Math.random() * 1 + 0.5;
-          friction = 0.88 + Math.random() * 0.04;
-          ease = 0.06 + Math.random() * 0.04; // Slightly reduced from 0.08
+          friction = 0.92 + Math.random() * 0.04;
+          ease = 0.12 + Math.random() * 0.06; // Much faster easing
         } else if (rand < 0.85) {
-          // Anchors: slow, persistent, medium (but less sticky)
+          // Anchors: medium speed, persistent
           type = 'anchor';
-          maxSpeed = 2.0; // Increased from 1.5
-          attractionStrength = 1.1; // Reduced from 1.8
+          maxSpeed = 4;  // Faster
+          attractionStrength = 1.8;
           size = Math.random() * 1.5 + 1;
-          friction = 0.92 + Math.random() * 0.03; // Reduced from 0.94
-          ease = 0.04 + Math.random() * 0.02; // Slightly increased from 0.03
+          friction = 0.94 + Math.random() * 0.03;
+          ease = 0.08 + Math.random() * 0.04; // Faster easing
         } else {
           // Drifters: medium speed, low attraction, large
           type = 'drifter';
-          maxSpeed = 2.5;
-          attractionStrength = 0.5; // Slightly reduced from 0.6
+          maxSpeed = 5;  // Faster
+          attractionStrength = 0.8;
           size = Math.random() * 2 + 1.2;
-          friction = 0.90 + Math.random() * 0.05;
-          ease = 0.05 + Math.random() * 0.05;
+          friction = 0.92 + Math.random() * 0.05;
+          ease = 0.10 + Math.random() * 0.05; // Faster easing
         }
 
         particles.current.push({
@@ -449,50 +470,99 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' 
   // Watch for text changes
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      swarmLog('ERROR: Canvas ref is null');
+      return;
+    }
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      swarmLog('ERROR: Could not get 2d context');
+      return;
+    }
     
-    if (text !== currentTextRef.current) {
-      currentTextRef.current = text;
+    // Guard against empty or invalid text
+    const safeText = text && text.trim() ? text.trim() : 'PLURIBUS';
+    swarmLog('Processing text change:', { 
+      originalText: text, 
+      safeText, 
+      currentRef: currentTextRef.current,
+      willUpdate: safeText !== currentTextRef.current 
+    });
+    
+    if (safeText !== currentTextRef.current) {
+      currentTextRef.current = safeText;
       
-      // Regenerate text coordinates
-      generateTextCoordinates(ctx, text);
+      // Clear and regenerate text coordinates
+      textCoordinates.current = [];
+      
+      // Ensure canvas is sized - if not, size it now
+      if (canvas.width === 0 || canvas.height === 0) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        swarmLog('Canvas was not sized, setting now:', { width: canvas.width, height: canvas.height });
+      }
+      
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      swarmLog('Canvas dimensions:', { width, height });
+      
+      // Draw text to get coordinates
+      ctx.fillStyle = 'white';
+      const fontSize = Math.min(width / 8, 150);
+      ctx.font = `700 ${fontSize}px 'Cinzel', serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const centerX = width / 2;
+      const centerY = height / 2;
+      ctx.fillText(safeText, centerX, centerY);
+      
+      // Scan for pixels
+      const gap = 4;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const buffer = new Uint32Array(imageData.data.buffer);
+      for (let y = 0; y < height; y += gap) {
+        for (let x = 0; x < width; x += gap) {
+          if (buffer[y * width + x] & 0xff000000) {
+            textCoordinates.current.push({ x, y });
+          }
+        }
+      }
+      ctx.clearRect(0, 0, width, height);
+      
+      // Log some sample coordinates to verify they're centered
+      const sampleCoords = textCoordinates.current.slice(0, 5);
+      const avgY = textCoordinates.current.length > 0 
+        ? textCoordinates.current.reduce((sum, c) => sum + c.y, 0) / textCoordinates.current.length 
+        : 0;
+      
+      swarmLog('Text rendered:', { 
+        displayText: safeText, 
+        fontSize, 
+        center: { centerX, centerY }, 
+        pixelsFound: textCoordinates.current.length,
+        avgY: Math.round(avgY),
+        expectedCenterY: Math.round(height / 2),
+        sampleCoords
+      });
       
       // Reassign targets to existing particles
+      let formingCount = 0;
+      let floatingCount = 0;
       particles.current.forEach((p, i) => {
         if (i < textCoordinates.current.length) {
           p.targetX = textCoordinates.current[i].x;
           p.targetY = textCoordinates.current[i].y;
           p.isForming = true;
+          formingCount++;
         } else {
           // Extra particles float around
           p.isForming = false;
+          floatingCount++;
         }
       });
-    }
-    
-    function generateTextCoordinates(ctx: CanvasRenderingContext2D, text: string) {
-      textCoordinates.current = [];
-      ctx.fillStyle = 'white';
-      const fontSize = Math.min(canvas!.width / 8, 150);
-      ctx.font = `700 ${fontSize}px 'Cinzel', serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const centerX = canvas!.width / 2;
-      const centerY = canvas!.height / 2;
-      ctx.fillText(text, centerX, centerY);
-      const gap = 4;
-      const imageData = ctx.getImageData(0, 0, canvas!.width, canvas!.height);
-      const buffer = new Uint32Array(imageData.data.buffer);
-      for (let y = 0; y < canvas!.height; y += gap) {
-        for (let x = 0; x < canvas!.width; x += gap) {
-          if (buffer[y * canvas!.width + x] & 0xff000000) {
-            textCoordinates.current.push({ x, y });
-          }
-        }
-      }
-      ctx.clearRect(0, 0, canvas!.width, canvas!.height);
+      
+      swarmLog('Particle assignment:', { formingCount, floatingCount, total: particles.current.length });
     }
   }, [text]);
 

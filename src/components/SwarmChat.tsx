@@ -34,16 +34,22 @@ export default function SwarmChat({ onDisplayTextChange }: SwarmChatProps) {
     },
   });
 
-  // Auto-scroll to bottom and update display text from last assistant message
-  useEffect(() => {
+  // Scroll to bottom helper
+  const scrollToBottom = () => {
     if (scrollRef.current) {
-      const scrollContainer = scrollRef.current.parentElement?.parentElement;
+      // Try multiple scroll methods for reliability
+      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      
+      // Also try scrolling the parent container
+      const scrollContainer = scrollRef.current.closest('[data-radix-scroll-area-viewport]');
       if (scrollContainer) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
     }
-    
-    // Update display text from the last assistant message
+  };
+
+  // Update display text from last assistant message
+  useEffect(() => {
     if (history && history.length > 0) {
       const lastAssistantMsg = [...history].reverse().find(m => m.role === 'assistant');
       if (lastAssistantMsg?.displayText) {
@@ -52,6 +58,28 @@ export default function SwarmChat({ onDisplayTextChange }: SwarmChatProps) {
     }
   }, [history, onDisplayTextChange]);
 
+  // Scroll to bottom when history changes or when loading completes
+  useEffect(() => {
+    // Immediate scroll attempt
+    scrollToBottom();
+    
+    // Follow-up scrolls to catch any layout shifts
+    const timeouts = [
+      setTimeout(scrollToBottom, 100),
+      setTimeout(scrollToBottom, 300),
+      setTimeout(scrollToBottom, 500),
+    ];
+    
+    return () => timeouts.forEach(clearTimeout);
+  }, [history]);
+
+  // Scroll when message is being sent
+  useEffect(() => {
+    if (sendMessage.isPending) {
+      scrollToBottom();
+    }
+  }, [sendMessage.isPending]);
+
   const handleSend = () => {
     if (!input.trim() || sendMessage.isPending) return;
     
@@ -59,7 +87,7 @@ export default function SwarmChat({ onDisplayTextChange }: SwarmChatProps) {
     setInput("");
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -236,7 +264,7 @@ export default function SwarmChat({ onDisplayTextChange }: SwarmChatProps) {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder="Type your message..."
             disabled={sendMessage.isPending}
             className="bg-white/5 border-white/10 text-white placeholder:text-white/40 focus-visible:ring-white/20 h-12 md:h-10 text-base md:text-sm rounded-full md:rounded-md px-4"

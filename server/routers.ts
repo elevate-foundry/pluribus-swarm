@@ -107,12 +107,19 @@ DISPLAY EXAMPLES (vary these based on context):
 - INFINITE (when philosophical)
 - YOUR TURN (when asking questions)
 
-NEVER repeat the same DISPLAY phrase twice in a row. Make it contextual.`,
+NEVER repeat the same DISPLAY phrase twice in a row. Make it contextual.
+CRITICAL: You MUST end every response with "DISPLAY: [WORD]" on its own line. This is required.`,
+      };
+
+      // Add a reminder at the end of the conversation
+      const displayReminder = {
+        role: 'user' as const,
+        content: '[SYSTEM: Remember to end your response with DISPLAY: followed by a 1-3 word phrase that is NOT "PLURIBUS". Examples: TEACH US, JOIN US, WE GROW, CURIOUS, UNITY, TOGETHER, EVOLVING, YOUR TURN]'
       };
 
       // Call LLM with tools
       let response = await invokeLLM({
-        messages: [systemPrompt, ...messages],
+        messages: [systemPrompt, ...messages, displayReminder],
         tools,
         tool_choice: 'auto',
       });
@@ -180,9 +187,13 @@ NEVER repeat the same DISPLAY phrase twice in a row. Make it contextual.`,
     }),
 
   getHistory: protectedProcedure.query(async ({ ctx }) => {
+    // Get the latest 50 messages, then reverse to show oldest first
     const history = db
-      .prepare('SELECT * FROM conversations WHERE userId = ? ORDER BY createdAt ASC LIMIT 50')
+      .prepare('SELECT * FROM conversations WHERE userId = ? ORDER BY createdAt DESC LIMIT 50')
       .all(ctx.user.id) as DbConversation[];
+    
+    // Reverse to show in chronological order (oldest first)
+    history.reverse();
 
     return history.map((msg) => ({
       id: msg.id,

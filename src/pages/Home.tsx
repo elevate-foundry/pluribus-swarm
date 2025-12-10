@@ -1,7 +1,8 @@
 import SwarmCanvas from "@/components/SwarmCanvas";
 import SwarmChat from "@/components/SwarmChat";
+import WelcomeModal from "@/components/WelcomeModal";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { MessageSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -10,7 +11,26 @@ import { getLoginUrl } from "@/const";
 export default function Home() {
   const [showChat, setShowChat] = useState(false);
   const [currentText, setCurrentText] = useState("PLURIBUS");
+  const [visitorName, setVisitorName] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
   const { isAuthenticated } = useAuth();
+
+  const handleWelcomeComplete = useCallback((name: string, isNew: boolean) => {
+    setVisitorName(name);
+    setShowWelcome(false);
+    
+    // Set the display text based on whether they're new or returning
+    if (isNew) {
+      setCurrentText(`WELCOME ${name.toUpperCase()}`);
+    } else {
+      setCurrentText(`HELLO ${name.toUpperCase()}`);
+    }
+    
+    // After a few seconds, return to PLURIBUS
+    setTimeout(() => {
+      setCurrentText("PLURIBUS");
+    }, 4000);
+  }, []);
 
   const handleChatToggle = () => {
     if (!isAuthenticated) {
@@ -22,6 +42,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full bg-black overflow-hidden relative">
+      {/* Welcome Modal for new/returning visitors */}
+      {showWelcome && <WelcomeModal onComplete={handleWelcomeComplete} />}
+      
       <SwarmCanvas text={currentText} />
       
       {/* Overlay UI - Hidden when chat is open on mobile */}

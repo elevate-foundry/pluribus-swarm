@@ -3,11 +3,14 @@
 # Pluribus Swarm - Start Script
 # Starts both frontend and backend servers
 
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 echo "🐝 Starting Pluribus Swarm..."
 
 # Load environment variables
-if [ -f .env ]; then
-  export $(cat .env | grep -v '^#' | xargs)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  export $(cat "$SCRIPT_DIR/.env" | grep -v '^#' | xargs)
 fi
 
 # Kill any existing processes on our ports
@@ -16,7 +19,7 @@ lsof -ti:5173 | xargs kill -9 2>/dev/null
 
 # Start backend server
 echo "📡 Starting backend server..."
-cd server && npm run dev &
+cd "$SCRIPT_DIR/server" && npm run dev &
 BACKEND_PID=$!
 
 # Wait for backend to be ready
@@ -24,7 +27,7 @@ sleep 3
 
 # Start frontend
 echo "🎨 Starting frontend..."
-cd .. && npm run dev &
+cd "$SCRIPT_DIR" && npm run dev &
 FRONTEND_PID=$!
 
 echo ""

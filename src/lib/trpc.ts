@@ -265,5 +265,38 @@ export const trpc = {
         return { data, isLoading }
       },
     },
+
+    // Knowledge Graph
+    getConceptGraph: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any>('chat.getConceptGraph')
+            .then(setData)
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
+
+    getSwarmStats: {
+      useQuery: () => {
+        const [data, setData] = useState<any>(null)
+        const [isLoading, setIsLoading] = useState(true)
+        
+        useEffect(() => {
+          trpcCall<any>('chat.getSwarmStats')
+            .then(setData)
+            .catch(console.error)
+            .finally(() => setIsLoading(false))
+        }, [])
+        
+        return { data, isLoading }
+      },
+    },
   },
 }
