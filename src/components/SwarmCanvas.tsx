@@ -21,10 +21,61 @@ interface Particle {
 
 interface SwarmCanvasProps {
   text?: string;
-  particleCount?: number;
+  particleCount?: number | 'auto';
 }
 
-export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 8000 }: SwarmCanvasProps) {
+/**
+ * Calculate optimal particle count based on device capabilities
+ */
+function calculateOptimalParticleCount(): number {
+  // Check device memory (in GB) - available in Chrome/Edge
+  const deviceMemory = (navigator as any).deviceMemory || 4; // Default 4GB if not available
+  
+  // Check hardware concurrency (CPU cores)
+  const cpuCores = navigator.hardwareConcurrency || 4;
+  
+  // Check if mobile device (typically less powerful)
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  // Check screen size (larger screens can handle more particles visually)
+  const screenArea = window.innerWidth * window.innerHeight;
+  const screenFactor = Math.min(screenArea / (1920 * 1080), 2); // Normalize to 1080p, cap at 2x
+  
+  // Base calculation
+  // Memory: ~100 bytes per particle, we want to use max 5% of available memory
+  const memoryBasedMax = (deviceMemory * 1024 * 1024 * 1024 * 0.05) / 100;
+  
+  // CPU: More cores = more particles we can animate smoothly
+  const cpuBasedMax = cpuCores * 2000;
+  
+  // Take the minimum of memory and CPU constraints
+  let optimalCount = Math.min(memoryBasedMax, cpuBasedMax);
+  
+  // Adjust for screen size
+  optimalCount *= screenFactor;
+  
+  // Mobile penalty (GPUs are weaker)
+  if (isMobile) {
+    optimalCount *= 0.4;
+  }
+  
+  // Clamp to reasonable range
+  const minParticles = 2000;
+  const maxParticles = 50000;
+  optimalCount = Math.max(minParticles, Math.min(maxParticles, optimalCount));
+  
+  console.log(`🐝 Particle calculation:
+    Device Memory: ${deviceMemory}GB
+    CPU Cores: ${cpuCores}
+    Screen: ${window.innerWidth}x${window.innerHeight}
+    Mobile: ${isMobile}
+    Optimal Particles: ${Math.round(optimalCount)}`);
+  
+  return Math.round(optimalCount);
+}
+
+export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 'auto' }: SwarmCanvasProps) {
+  const resolvedParticleCount = particleCount === 'auto' ? calculateOptimalParticleCount() : particleCount;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particles = useRef<Particle[]>([]);
   const animationFrameId = useRef<number>(0);
@@ -74,7 +125,7 @@ export default function SwarmCanvas({ text = 'PLURIBUS', particleCount = 8000 }:
     // Initialize particles
     const initParticles = () => {
       particles.current = [];
-      const numberOfParticles = particleCount; // Configurable swarm density
+      const numberOfParticles = resolvedParticleCount; // Auto-calculated or specified
 
       // Generate text coordinates first to know where targets are
       generateTextCoordinates(ctx, text);
