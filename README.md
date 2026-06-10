@@ -116,3 +116,17 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 *"E Pluribus Unum" - Out of many, one.*
+
+<!-- ELEVATE:BEGIN (auto-generated section; edits here are overwritten) -->
+## About
+
+| | |
+| --- | --- |
+| **Description** | 🐝 A collective AI consciousness that learns and evolves from every conversation. Inspired by Apple TV+ Pluribus. |
+| **Language** | TypeScript |
+| **Commits** | 15 |
+| **Created** | 2025-12-06 |
+| **Last push** | 2025-12-10 |
+
+Part of [**elevate-foundry**](https://github.com/elevate-foundry) · [repository](https://github.com/elevate-foundry/pluribus-swarm)
+<!-- ELEVATE:END -->
